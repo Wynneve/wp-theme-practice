@@ -4,70 +4,53 @@
 
 <!DOCTYPE html>
 <html>
-    <?php
-        if(have_posts()):
-    ?>
-        <head>
-            <title><?php the_title();?></title>
-            <!-- <?= 'asdsadas' ?> -->
-        </head>
-        <body>
-            <h1><?php the_title(); ?></h1>
-            <?php
-                $events = new WP_Query('post_type=event&posts_per_page=10');
-                $locations = get_locations();
+    <head>
+        <title><?= the_title();?></title>
+    </head>
+    <body>
+        <h1><?= the_title(); ?></h1>
+        <?php
+            $locations = get_locations();
 
-                while($events->have_posts()): $events->the_post();
-                    $post_id = get_the_ID();
-                    $date = get_post_meta($post_id, 'date', true);
-                    $location_id = get_post_meta($post_id, 'location', true);
-                    $date = get_post_meta($post_id, 'date', true);
+            $endpoint = 'http://localhost/wordpress/wp-json/custom/events';
+            $url = sprintf('%s?%s', $endpoint, http_build_query([
+                'location' => isset($_GET['location_sort']) ? $_GET['location_sort'] : '',
+                'date_start' => isset($_GET['date_start']) ? $_GET['date_start'] : '',
+                'date_finish' => isset($_GET['date_finish']) ? $_GET['date_finish'] : '',
+            ]));
 
-                    if(array_key_exists('location_sort', $_GET) && $_GET['location_sort'] != $location_id) continue;
-                    if(array_key_exists('date_start', $_GET) && !empty($_GET['date_start']) && strtotime($_GET['date_start']) > strtotime($date) ) continue;
-                    if(array_key_exists('date_finish', $_GET) && !empty($_GET['date_finish']) && strtotime($_GET['date_finish']) < strtotime($date) ) continue;
+            $results = json_decode(wp_remote_get($url)['body'], true);
 
-                    echo '<a href="' . get_the_permalink() . '"><h1>'; the_title(); echo '</h1></a>';
-                    the_excerpt();
+            if(!isset($results['code']) || $results['code'] != 'no_posts'):
+                foreach($results as $post): ?>
+                    <a href="<?=get_permalink($post['ID'])?>"><h2><?=$post['post_title']?></h2></a>
+                    <p>By: <?=get_user_by('id', $post['post_author'])->display_name?></p>
+                    <p>Date: <?=$post['meta']['date'][0]?></p>
+                    <p>Address: <?=get_post_field('post_title', $post['meta']['location'][0])?>, 
+                                <?=get_post_meta($post['meta']['location'][0], 'address')[0]?></p>
+                <?php endforeach;
+            else: ?>
+                <h1>Записи не найдены.</h1>
+            <?php endif;
 
-                endwhile;
-
-                echo
-                '
-                    <form>
-                    <h2>Сортировка по площадке:</h2>
-                    <select id="location_sort_field" name="location_sort">    
-                ';
-                foreach ($locations as $location) {
-                    echo
-                    '
-                        <option value="' . $location[0] . '" ' . ((array_key_exists('location_sort', $_GET) && $location[0] == $_GET['location_sort']) ? 'selected' : '') . '>' . $location[1] . '</option>
-                    ';
-                }
-                echo
-                '
-                    </select>
-                ';
-
-                echo
-                '
-                    <h2>Сортировка по дате проведения:</h2>
-                    <h3>Начальная дата:</h3>
-                    <input type="date" id="date_start_field" name="date_start" value="' . (array_key_exists('date_start', $_GET) ? $_GET['date_start'] : '') . '">
-                    <h3>Конечная дата:</h3>
-                    <input type="date" id="date_finish_field" name="date_finish" value="' . (array_key_exists('date_finish', $_GET) ? $_GET['date_finish'] : '') . '">
-                    <p></p>
-                    <input type="submit" value="Сортировать">
-                    </form>
-                ';
             ?>
-        </body>
-    <?php else: ?>
-        <head>
-            <title>No posts</title>
-        </head>
-        <body>
-            <p>No posts found.</p>
-        </body>
-    <?php endif; ?>
+                <form>
+                <h2>Сортировка по площадке:</h2>
+                <select id="location_sort_field" name="location_sort">
+            <?php
+            foreach ($locations as $location): ?>
+                <option value="<?=$location[0]?>" <?=(array_key_exists('location_sort', $_GET) && $location[0] == $_GET['location_sort']) ? 'selected' : ''?>><?=$location[1]?></option>
+            <?php endforeach;
+            ?>
+                </select>
+
+                <h2>Сортировка по дате проведения:</h2>
+                <h3>Начальная дата:</h3>
+                <input type="date" id="date_start_field" name="date_start" value="<?=array_key_exists('date_start', $_GET) ? $_GET['date_start'] : ''?>">
+                <h3>Конечная дата:</h3>
+                <input type="date" id="date_finish_field" name="date_finish" value="<?=array_key_exists('date_finish', $_GET) ? $_GET['date_finish'] : ''?>">
+                <p></p>
+                <input type="submit" value="Сортировать">
+                </form>
+    </body>
 </html>

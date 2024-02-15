@@ -11,17 +11,17 @@ add_action('wp_enqueue_scripts', 'events_styles');
 // Event post type
 
 function create_event_post_type() {
-    register_post_type('event', array(
-        'labels' => array(
+    register_post_type('event', [
+        'labels' => [
             'name' => __('События'),
             'singular_name' => __('Событие')
-        ),
+        ],
         'public' => true,
         'has_archive' => true,
-        'rewrite' => array('slug' => 'event'),
-        'supports' => array('title', 'editor', 'thumbnail', 'excerpt', 'comments'),
-        'taxonomies' => array('category', 'post_tag')
-    ));
+        'rewrite' => ['slug' => 'event'],
+        'supports' => ['title', 'editor', 'thumbnail', 'excerpt', 'comments'],
+        'taxonomies' => ['category', 'post_tag'],
+    ]);
 }
 
 add_action('init', 'create_event_post_type');
@@ -29,17 +29,17 @@ add_action('init', 'create_event_post_type');
 // Location post type
 
 function create_location_post_type() {
-    register_post_type('location', array(
-        'labels' => array(
+    register_post_type('location', [
+        'labels' => [
             'name' => __('Площадки'),
             'singular_name' => __('Площадка')
-        ),
+        ],
         'public' => true,
         'has_archive' => true,
-        'rewrite' => array('slug' => 'location'),
-        'supports' => array('title', 'editor', 'thumbnail', 'excerpt', 'comments'),
-        'taxonomies' => array('category', 'post_tag')
-    ));
+        'rewrite' => ['slug' => 'location'],
+        'supports' => ['title', 'editor', 'thumbnail', 'excerpt', 'comments'],
+        'taxonomies' => ['category', 'post_tag']
+    ]);
 }
 
 add_action('init', 'create_location_post_type');
@@ -71,33 +71,28 @@ function add_event_metaboxes() {
 
 function show_date_field($post) {
     $date = get_post_meta($post->ID, 'date', true);
-    echo
-    '
-        <input type="date" id="date_field" name="date" value="' . $date . '">
-    ';
+    ?>
+        <input type="date" id="date_field" name="date" value="<?=$date?>">
+    <?php
 }
 
 function show_location_field($post) {
     $locations = get_locations();
-
     $location_id = get_post_meta($post->ID, 'location', true);
 
-    echo
-    '
+    ?>
         <select id="location_field" name="location">    
-    ';
+    <?php
 
     foreach ($locations as $location) {
-        echo
-        '
-            <option value="' . $location[0] . '" ' . (($location[0] == $location_id) ? 'selected' : '') . '>' . $location[1] . '</option>
-        ';
+        ?>
+            <option value="<?=$location[0]?>" <?=($location[0] == $location_id) ? 'selected' : ''?>><?=$location[1]?></option>
+        <?php
     }
 
-    echo
-    '
+    ?>
         </select>
-    ';
+    <?php
 }
 
 function save_event_fields($post_id) {
@@ -105,8 +100,10 @@ function save_event_fields($post_id) {
     
     if(!current_user_can('edit_post', $post_id)) return;
 
-    $date = array_key_exists('date', $_POST) ? $_POST['date'] : '';
-    $location = array_key_exists('location', $_POST) ? $_POST['location'] : '';
+    if(get_post_type($post_id) != 'event') return;
+
+    $date = isset($_POST['date']) ? $_POST['date'] : '';
+    $location = isset($_POST['location']) ? $_POST['location'] : '';
 
     update_post_meta($post_id, 'date', $date);
     update_post_meta($post_id, 'location', $location);
@@ -139,89 +136,107 @@ function add_location_metaboxes() {
 
 function show_address_field($post) {
     $address = get_post_meta($post->ID, 'address', true);
-    echo
-    '
-        <input type="text" id="address_field" name="address" value="' . $address . '">
-    ';
+    ?>
+        <input type="text" id="address_field" name="address" value="<?=$address?>">
+    <?php
 }
 
 function show_telephone_field($post) {
     $telephone = get_post_meta($post->ID, 'telephone', true);
-    echo
-    '
-        <input type="text" id="telephone_field" name="telephone" value="' . $telephone . '">
-    ';
+    ?>
+        <input type="text" id="telephone_field" name="telephone" value="<?=$telephone?>">
+    <?php
 }
 
 function save_location_fields($post_id) {
     if(defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
     
     if(!current_user_can('edit_post', $post_id)) return;
+    
+    if(get_post_type($post_id) != 'location') return;
 
-    $address = array_key_exists('address', $_POST) ? $_POST['address'] : '';
-    $telephone = array_key_exists('telephone', $_POST) ? $_POST['telephone'] : '';
+    $address = isset($_POST['address']) ? $_POST['address'] : '';
+    $telephone = isset($_POST['telephone']) ? $_POST['telephone'] : '';
 
     update_post_meta($post_id, 'address', $address);
     update_post_meta($post_id, 'telephone', $telephone);
 }
 
+// Helper functions
+
 function get_locations() {
-    $args = array('post_type' => 'location');
-    $query = new WP_Query($args);
-    $locations = array();
-    $has_locations = $query->have_posts();
-    while($query->have_posts()) {
-        $query->the_post();
-        array_push($locations, array(get_the_ID(), get_the_title()));
+    $locations = get_posts([
+		'post_type' => 'location',
+	]);
+    $filtered = [];
+    foreach($locations as $location) {
+        array_push($filtered, [$location->ID, $location->post_title]);
     }
-    wp_reset_postdata();
 
-    return $has_locations ? $locations : false;
+    return empty($filtered) ? false : $filtered;
 }
-
 
 // REST API
 
+add_action('rest_api_init', 'register_event_route');
 
-// создание маршрута
-add_action( 'rest_api_init', function(){
+function register_event_route() {
+    $namespace = 'custom';
 
-	// маршрут
-	$route = '/events/(?P<id>\d+)';
+	$route = '/events';
 
-	// параметры конечной точки (маршрута)
 	$route_params = [
 		'methods'  => 'GET',
 		'callback' => 'get_events',
 		'args'     => [
 			'location' => [
-				'type'     => 'int', // значение параметра должно быть строкой
-				'required' => true,     // параметр обязательный
-            ]
-			// ],
-			// 'arg_int' => [
-			// 	'type'    => 'integer', // значение параметра должно быть числом
-			// 	'default' => 10,        // значение по умолчанию = 10
-			// ],
+				'type'     => 'int',
+				'required' => false,
+            ],
+			'date_start' => [
+                'type'     => 'string',
+                'required' => false,
+            ],
+            'date_finish' => [
+                'type'     => 'string',
+                'required' => false,
+            ],
 		],
-		'permission_callback' => function( $request ){
-			// только авторизованный юзер имеет доступ к эндпоинту
-			return is_user_logged_in();
-		},
 	];
 
-	register_rest_route( $namespace, $route, $route_params );
+	register_rest_route($namespace, $route, $route_params);
+}
 
-} );
+function get_events(WP_REST_Request $request) {
+    $query = $request->get_query_params();
+    if(!empty($query['location'])) $location = $query['location'];
+    if(!empty($query['date_start'])) $date_start = $query['date_start'];
+    if(!empty($query['date_finish'])) $date_finish = $query['date_finish'];
 
-// функция обработчик конечной точки (маршрута)
-function get_events( WP_REST_Request $request ){
+	$posts = get_posts([
+		'post_type' => 'event',
+        'meta_query' => [
+            'relation' => 'AND',
+            isset($location) ? [
+                'key' => 'location',
+                'value' => $location,
+                'compare_key' => '=',
+            ] : [],
+            ],
+	]);
 
-	$posts = get_posts( [
-		'type' => 'event',
-	] );
+    $result = [];
+    
+    foreach($posts as $post) {
+        $post->meta = get_post_meta($post->ID);
 
-	if ( empty( $posts ) ) {
+        if(isset($date_start) && strtotime($post->meta['date'][0]) < strtotime($date_start)) continue;
+        if(isset($date_finish) && strtotime($post->meta['date'][0]) > strtotime($date_finish)) continue;
+
+        array_push($result, $post);
+    }
+
+	if (empty($result)) {
 		return new WP_Error( 'no_posts', 'Событий не найдено', [ 'status' => 404 ] );
 	}
 
